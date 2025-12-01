@@ -1828,23 +1828,31 @@ elif section == "4️⃣ Ask a Question (Agent 2)":
                             st.markdown("### 📊 Result Preview (top 50 rows)")
                             st.dataframe(result_df.head(50))
 
-                            st.markdown("---")
-                            st.markdown("### 🧠 Agent 3 – Visuals & Insight")
-                            if st.button("▶ Run Agent 3: Visuals + Insight"):
-                                run_agent_3(result_df)
+        # 🧠 Agent 3 – Visuals & Insight (fixed to use stored last_result)
+        st.markdown("---")
+        st.markdown("### 🧠 Agent 3 – Visuals & Insight")
+        last_result = report.get("last_result")
+        if last_result is not None:
+            if st.button("▶ Run Agent 3: Visuals + Insight"):
+                run_agent_3(last_result)
+        else:
+            st.info("Run an analysis first so Agent 3 can visualize the latest result.")
 
-                            # Follow-up questions
-                            if OPENAI_API_KEY:
-                                st.markdown("---")
-                                st.markdown("### 🔁 Suggested Follow-up Questions")
-                                followups = agent3_followup_questions(question.strip(), result_df)
-                                if followups:
-                                    for i, fq in enumerate(followups):
-                                        if st.button(f"💬 {fq}", key=f"followup_{i}"):
-                                            st.session_state["agent2_question"] = fq
-                                            st.experimental_rerun()
-                                else:
-                                    st.info("No follow-up suggestions available for this result.")
+        # Follow-up questions
+        if OPENAI_API_KEY and report.get("last_result") is not None:
+            st.markdown("---")
+            st.markdown("### 🔁 Suggested Follow-up Questions")
+            followups = agent3_followup_questions(
+                question.strip() if question else "",
+                report["last_result"],
+            )
+            if followups:
+                for i, fq in enumerate(followups):
+                    if st.button(f"💬 {fq}", key=f"followup_{i}"):
+                        st.session_state["agent2_question"] = fq
+                        st.experimental_rerun()
+            else:
+                st.info("No follow-up suggestions available for this result.")
 
 
 # 5️⃣ Logs & Debug
