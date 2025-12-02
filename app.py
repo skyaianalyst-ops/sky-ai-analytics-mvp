@@ -307,7 +307,7 @@ def agent1_summary(catalog: Dict[str, Any]) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-gpt-5.1",
+            model="gpt-5.1-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -403,7 +403,7 @@ def agent1_viz_blueprint(catalog: Dict[str, Any], main_sheet: str) -> Optional[L
 
     try:
         response = client.chat.completions.create(
-            model="gpt-gpt-5.1",
+            model="gpt-5.1-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -531,7 +531,7 @@ def agent2_generate_code(
 
     try:
         response = client.chat.completions.create(
-            model="gpt-5.1",
+            model="gpt-5.1-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -581,7 +581,7 @@ def agent2_self_heal(code: str, error: str, question: str) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-gpt-5.1",
+            model="gpt-5.1-mini",
             messages=[
                 {"role": "system", "content": "You fix Pandas code."},
                 {"role": "user", "content": prompt},
@@ -739,7 +739,7 @@ def agent3_insight(df: pd.DataFrame) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-gpt-5.1",
+            model="gpt-5.1-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
         )
@@ -788,7 +788,7 @@ def agent3_followup_questions(question: str, df: pd.DataFrame) -> List[str]:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-gpt-5.1",
+            model="gpt-5.1-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
         )
@@ -845,7 +845,7 @@ def explain_chart_button(df_small: pd.DataFrame, title: str, context: str, key: 
         with st.spinner("Explaining chart..."):
             try:
                 response = client.chat.completions.create(
-                    model="gpt-gpt-5.1",
+                    model="gpt-5.1-mini",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.2,
                 )
@@ -944,7 +944,7 @@ def dataset_auto_insights_text(df: pd.DataFrame, sheet_name: str) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-gpt-5.1",
+            model="gpt-5.1-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.25,
         )
@@ -1884,4 +1884,5 @@ elif section == "5️⃣ Logs & Debug":
 
 st.markdown("---")
 st.caption("AI Analytics MVP – Agent 1–3, multi-visual dashboards with global date filters, saved views (date + filters) & follow-up Q&A.")
+
 
