@@ -531,7 +531,7 @@ def agent2_generate_code(
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model="gpt-4.1",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -1884,7 +1884,3 @@ elif section == "5️⃣ Logs & Debug":
 
 st.markdown("---")
 st.caption("AI Analytics MVP – Agent 1–3, multi-visual dashboards with global date filters, saved views (date + filters) & follow-up Q&A.")
-
-
-
-
