@@ -30,6 +30,11 @@ st.set_page_config(page_title="AI Analytics MVP", page_icon="📊", layout="wide
 st.title("📊 AI Analytics MVP")
 st.caption("Excel / CSV → Auto Catalog → Auto Insights → NL Q&A (Agents 1–3)")
 
+# A professional, colorful palette used across visuals (PowerBI-style feel)
+COLOR_PALETTE = [
+    "#4c78a8", "#f58518", "#e45756", "#72b7b2", "#54a24b",
+    "#eeca3b", "#b279a2", "#ff9da7", "#9d755d", "#bab0ab"
+]
 
 # ================================================================
 # REPORT MANAGEMENT (POWER BI–STYLE)
@@ -347,7 +352,8 @@ def agent1_viz_blueprint(catalog: Dict[str, Any], main_sheet: str) -> Optional[L
     - The NAME of the MAIN SHEET that will be used for the primary dashboard.
 
     Your job:
-    1) Analyse the main sheet and imagine a rich Power BI / Tableau style dashboard.
+    1) Analyse the main sheet and imagine a rich dashboard with colorful but professional visuals
+       (similar in spirit to modern BI tools).
     2) Design a VIZ PLAN listing as many meaningful charts as possible (ideally 8–15),
        covering DIFFERENT visualization types, such as:
        - Line Charts (trend over time)
@@ -362,11 +368,16 @@ def agent1_viz_blueprint(catalog: Dict[str, Any], main_sheet: str) -> Optional[L
     3) Use only columns that exist in the MAIN SHEET.
     4) You are primarily doing descriptive analytics on historical data;
        the app may overlay simple predictions on top of time trends.
-    5) Allowed chart_type values:
+    5) Ensure variety:
+       - At least one time-based trend chart where x is a date/time column.
+       - At least one PIE chart where a category split makes business sense.
+       - At least one distribution view (histogram or boxplot) for a key numeric metric.
+    6) Allowed chart_type values:
        "bar", "column", "line", "area",
        "scatter", "histogram", "pie",
        "heatmap", "boxplot", "bubble".
-    6) Aggregations: "sum", "mean", "count", or "none".
+    7) Aggregations: "sum", "mean", "count", or "none".
+    8) Do not mention tool names or colors in chart titles; titles should be business-friendly.
 
     OUTPUT FORMAT:
     - Return STRICT JSON ONLY, no markdown, no explanation.
@@ -674,6 +685,7 @@ def generate_chart(
                 x=alt.X(f"{x_col}:T", title=pretty_label(x_col)),
                 y=alt.Y(y_col, title=pretty_label(y_col)),
                 tooltip=[x_col, y_col],
+                color=alt.value("#4c78a8"),
             )
             .properties(height=400)
         )
@@ -686,6 +698,7 @@ def generate_chart(
                 x=alt.X(x_col, sort="-y", title=pretty_label(x_col)),
                 y=alt.Y(y_col, title=pretty_label(y_col)),
                 tooltip=[x_col, y_col],
+                color=alt.Color(x_col, scale=alt.Scale(range=COLOR_PALETTE)),
             )
             .properties(height=400)
         )
@@ -698,6 +711,7 @@ def generate_chart(
                 x=alt.X(x_col, title=pretty_label(x_col)),
                 y=alt.Y(y_col, title=pretty_label(y_col)),
                 tooltip=df.columns.tolist(),
+                color=alt.Color(x_col, scale=alt.Scale(range=COLOR_PALETTE)),
             )
             .properties(height=400)
         )
@@ -710,6 +724,7 @@ def generate_chart(
                 x=alt.X(f"{x_col}:T", title=pretty_label(x_col)),
                 y=alt.Y(y_col, title=pretty_label(y_col)),
                 tooltip=[x_col, y_col],
+                color=alt.value("#4c78a8"),
             )
             .properties(height=400)
         )
@@ -918,7 +933,7 @@ def dataset_auto_insights_text(df: pd.DataFrame, sheet_name: str) -> str:
         cat_samples[c] = df[c].value_counts().head(10).to_dict()
 
     prompt = f"""
-    You are an expert BI analyst (Power BI/Tableau style).
+    You are an expert BI analyst.
     You received a main dataset from sheet '{sheet_name}'.
 
     META:
@@ -1129,11 +1144,17 @@ def render_viz_plan(vis_df: pd.DataFrame, viz_plan: List[Dict[str, Any]]) -> Non
                     size_field = size_col if size_col else y
                     chart = base.mark_circle(opacity=0.7).encode(
                         size=alt.Size(size_field, legend=None),
-                        color=alt.Color(color_col) if color_col else alt.value("#4c78a8"),
+                        color=alt.Color(
+                            color_col if color_col else x,
+                            scale=alt.Scale(range=COLOR_PALETTE),
+                        ),
                     )
                 else:
                     chart = base.mark_circle(size=60, opacity=0.7).encode(
-                        color=alt.Color(color_col) if color_col else alt.value("#4c78a8"),
+                        color=alt.Color(
+                            color_col if color_col else x,
+                            scale=alt.Scale(range=COLOR_PALETTE),
+                        ),
                     )
 
                 chart = chart.properties(height=350)
@@ -1158,7 +1179,7 @@ def render_viz_plan(vis_df: pd.DataFrame, viz_plan: List[Dict[str, Any]]) -> Non
                         x=alt.X(x, bin=alt.Bin(maxbins=40), title=pretty_label(x)),
                         y=alt.Y("count()", title="Record Count"),
                         tooltip=[x, "count()"],
-                        color=alt.Color(color_col) if color_col else alt.value("#4c78a8"),
+                        color=alt.value("#4c78a8"),
                     )
                     .properties(height=350)
                 )
@@ -1196,7 +1217,11 @@ def render_viz_plan(vis_df: pd.DataFrame, viz_plan: List[Dict[str, Any]]) -> Non
                     .mark_arc()
                     .encode(
                         theta=alt.Theta(y_col, stack=True),
-                        color=alt.Color(x, legend=True, title=pretty_label(x)),
+                        color=alt.Color(
+                            x,
+                            legend=alt.Legend(title=pretty_label(x)),
+                            scale=alt.Scale(range=COLOR_PALETTE),
+                        ),
                         tooltip=[x, y_col],
                     )
                     .properties(height=350)
@@ -1223,7 +1248,11 @@ def render_viz_plan(vis_df: pd.DataFrame, viz_plan: List[Dict[str, Any]]) -> Non
                     .encode(
                         x=alt.X(x, title=pretty_label(x)),
                         y=alt.Y(y, title=pretty_label(y)),
-                        color=alt.Color("value", title="Count"),
+                        color=alt.Color(
+                            "value:Q",
+                            title="Count",
+                            scale=alt.Scale(scheme="yellowgreenblue"),
+                        ),
                         tooltip=[x, y, "value"],
                     )
                     .properties(height=350)
@@ -1250,7 +1279,10 @@ def render_viz_plan(vis_df: pd.DataFrame, viz_plan: List[Dict[str, Any]]) -> Non
                     .encode(
                         x=alt.X(x, title=pretty_label(x)),
                         y=alt.Y(y, title=pretty_label(y)),
-                        color=alt.Color(color_col) if color_col else alt.value("#4c78a8"),
+                        color=alt.Color(
+                            color_col if color_col else x,
+                            scale=alt.Scale(range=COLOR_PALETTE),
+                        ),
                     )
                     .properties(height=350)
                 )
@@ -1299,6 +1331,7 @@ def fallback_visuals(vis_df: pd.DataFrame, main_metric: Optional[str], cat_cols:
                 x=alt.X(sel_cat, sort="-y", title=pretty_label(sel_cat)),
                 y=alt.Y(main_metric, title=pretty_label(main_metric)),
                 tooltip=[sel_cat, main_metric],
+                color=alt.Color(sel_cat, scale=alt.Scale(range=COLOR_PALETTE)),
             )
             .properties(height=350)
         )
@@ -1326,6 +1359,7 @@ def fallback_visuals(vis_df: pd.DataFrame, main_metric: Optional[str], cat_cols:
                     x=alt.X(date_col, title=pretty_label(date_col)),
                     y=alt.Y(main_metric, title=pretty_label(main_metric)),
                     tooltip=[date_col, main_metric],
+                    color=alt.value("#4c78a8"),
                 )
                 .properties(height=350)
             )
@@ -1345,6 +1379,7 @@ def fallback_visuals(vis_df: pd.DataFrame, main_metric: Optional[str], cat_cols:
                 x=alt.X(main_metric, bin=alt.Bin(maxbins=30), title=pretty_label(main_metric)),
                 y=alt.Y("count()", title="Record Count"),
                 tooltip=[main_metric, "count()"],
+                color=alt.value("#4c78a8"),
             )
             .properties(height=350)
         )
@@ -1482,7 +1517,7 @@ elif section == "3️⃣ Full Data Insights (Auto)":
                     f"{len(main_df):,} rows × {len(main_df.columns)} columns"
                 )
 
-                # ---------------- GLOBAL DATE FILTER (POWER BI STYLE) ----------------
+                # ---------------- GLOBAL DATE FILTER ----------------
                 date_cols_main = [
                     c for c in main_df.columns if pd.api.types.is_datetime64_any_dtype(main_df[c])
                 ]
@@ -1591,34 +1626,63 @@ elif section == "3️⃣ Full Data Insights (Auto)":
 
                 main_metric = choose_main_metric_column(working_main_df)
 
-                # --- KPI SECTION ---
+                # --- KPI SECTION (Colorful, 6+ cards) ---
                 st.markdown("### 📌 Key Metrics")
+
+                total_records = len(working_main_df)
+                num_numeric = len(numeric_cols)
+                num_cats = len(cat_cols)
+                main_metric_sum = float(working_main_df[main_metric].sum()) if main_metric else 0.0
+                main_metric_avg = float(working_main_df[main_metric].mean()) if main_metric else 0.0
+                main_metric_max = float(working_main_df[main_metric].max()) if main_metric else 0.0 if main_metric else 0.0
+                first_cat = cat_cols[0] if cat_cols else None
+                distinct_main_metric = (
+                    working_main_df[main_metric].nunique() if main_metric else 0
+                )
+                distinct_first_cat = (
+                    working_main_df[first_cat].nunique() if first_cat else 0
+                )
+
+                # Row 1: 3 standard metrics
                 kpi_cols = st.columns(3)
                 with kpi_cols[0]:
-                    st.metric("📦 Total Records", f"{len(working_main_df):,}")
-
+                    st.metric("📦 Total Records", f"{total_records:,}")
                 if main_metric:
-                    total_val = float(working_main_df[main_metric].sum())
-                    avg_val = float(working_main_df[main_metric].mean())
                     with kpi_cols[1]:
-                        st.metric(f"💰 Total {pretty_label(main_metric)}", f"{total_val:,.2f}")
+                        st.metric(f"💰 Total {pretty_label(main_metric)}", f"{main_metric_sum:,.2f}")
                     with kpi_cols[2]:
-                        st.metric(f"📊 Avg {pretty_label(main_metric)}", f"{avg_val:,.2f}")
+                        st.metric(f"📊 Avg {pretty_label(main_metric)}", f"{main_metric_avg:,.2f}")
                 else:
                     with kpi_cols[1]:
-                        st.metric("🔢 Numeric Columns", str(len(numeric_cols)))
+                        st.metric("🔢 Numeric Columns", str(num_numeric))
                     with kpi_cols[2]:
-                        st.metric("🏷️ Categorical Columns", str(len(cat_cols)))
+                        st.metric("🏷️ Categorical Columns", str(num_cats))
+
+                # Row 2: 4 colorful KPI cards (HTML)
+                main_metric_label = pretty_label(main_metric) if main_metric else "Main Metric"
+                first_cat_label = pretty_label(first_cat) if first_cat else "Key Category"
 
                 kpi_html = f"""
-                <div style='display:flex; gap:1rem; margin-top:0.75rem;'>
-                  <div style='background:#1d4ed8; color:white; padding:0.75rem 1rem; border-radius:0.75rem; flex:1;'>
-                    <div style='font-size:0.7rem; text-transform:uppercase; opacity:0.8;'>Main Metric</div>
-                    <div style='font-size:1.1rem; font-weight:bold;'>{pretty_label(main_metric) if main_metric else "Not Detected"}</div>
+                <div style='display:flex; flex-wrap:wrap; gap:0.75rem; margin-top:0.75rem;'>
+                  <div style='background:#0f766e; color:white; padding:0.75rem 1rem; border-radius:0.9rem; flex:1; min-width:180px;'>
+                    <div style='font-size:0.7rem; text-transform:uppercase; opacity:0.85;'>Main Metric</div>
+                    <div style='font-size:1.1rem; font-weight:600;'>{main_metric_label}</div>
+                    <div style='font-size:0.8rem; opacity:0.9;'>Distinct values: {distinct_main_metric}</div>
                   </div>
-                  <div style='background:#15803d; color:white; padding:0.75rem 1rem; border-radius:0.75rem; flex:1;'>
-                    <div style='font-size:0.7rem; text-transform:uppercase; opacity:0.8;'>Rows Used for Visuals</div>
-                    <div style='font-size:1.1rem; font-weight:bold;'>{len(vis_df):,}</div>
+                  <div style='background:#7e22ce; color:white; padding:0.75rem 1rem; border-radius:0.9rem; flex:1; min-width:180px;'>
+                    <div style='font-size:0.7rem; text-transform:uppercase; opacity:0.85;'>Rows Used For Visuals</div>
+                    <div style='font-size:1.1rem; font-weight:600;'>{len(vis_df):,}</div>
+                    <div style='font-size:0.8rem; opacity:0.9;'>Sampled from {total_records:,} rows</div>
+                  </div>
+                  <div style='background:#b91c1c; color:white; padding:0.75rem 1rem; border-radius:0.9rem; flex:1; min-width:180px;'>
+                    <div style='font-size:0.7rem; text-transform:uppercase; opacity:0.85;'>{first_cat_label}</div>
+                    <div style='font-size:1.1rem; font-weight:600;'>Unique: {distinct_first_cat}</div>
+                    <div style='font-size:0.8rem; opacity:0.9;'>Total categorical columns: {num_cats}</div>
+                  </div>
+                  <div style='background:#0369a1; color:white; padding:0.75rem 1rem; border-radius:0.9rem; flex:1; min-width:180px;'>
+                    <div style='font-size:0.7rem; text-transform:uppercase; opacity:0.85;'>Numeric Columns</div>
+                    <div style='font-size:1.1rem; font-weight:600;'>{num_numeric}</div>
+                    <div style='font-size:0.8rem; opacity:0.9;'>Max {main_metric_label if main_metric else "Value"}: {main_metric_max:,.2f}</div>
                   </div>
                 </div>
                 """
@@ -1632,7 +1696,7 @@ elif section == "3️⃣ Full Data Insights (Auto)":
                 cat_filter_state: Dict[str, List[Any]] = {}
 
                 if cat_cols:
-                    st.markdown("### 🎛️ Filters & Saved Views (Power BI Style)")
+                    st.markdown("### 🎛️ Filters & Saved Views")
                     with st.expander("Open Filters & Saved Views", expanded=False):
                         max_filter_cols = min(3, len(cat_cols))
                         filter_cols = cat_cols[:max_filter_cols]
@@ -1722,7 +1786,7 @@ elif section == "3️⃣ Full Data Insights (Auto)":
 
                     viz_plan = report.get("viz_plan")
                     if viz_plan:
-                        st.markdown("### 📈 Agent 1–Driven Visuals (Multiple Types + Prediction Overlay)")
+                        st.markdown("### 📈 Agent 1–Driven Visuals (Multi-type + Prediction Overlay)")
                         render_viz_plan(filtered_df, viz_plan)
                     else:
                         st.markdown("### 📈 Visuals (Fallback – no viz_plan)")
@@ -1894,4 +1958,4 @@ elif section == "5️⃣ Logs & Debug":
             st.info("No result dataframe stored yet for this report.")
 
 st.markdown("---")
-st.caption("AI Analytics MVP – Agent 1–3, multi-visual dashboards with global date filters, saved views (date + filters) & follow-up Q&A.")
+st.caption("AI Analytics MVP – Agent 1–3, multi-visual dashboards with global date filters, saved views & follow-up Q&A.")
