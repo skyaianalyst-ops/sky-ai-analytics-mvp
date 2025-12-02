@@ -531,7 +531,7 @@ def agent2_generate_code(
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-4.1-mini",  # changed from gpt-4.1
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -1758,6 +1758,10 @@ elif section == "4️⃣ Ask a Question (Agent 2)":
     else:
         st.markdown(f"**Active report:** `{report['name']}`")
 
+        # --- Init session_state for agent2_question so widgets & callbacks play nicely ---
+        if "agent2_question" not in st.session_state:
+            st.session_state["agent2_question"] = ""
+
         question = st.text_input(
             "Your analytics question:",
             placeholder="e.g., 'Show total net_amount by product_category for last 6 months'",
@@ -1838,6 +1842,10 @@ elif section == "4️⃣ Ask a Question (Agent 2)":
         else:
             st.info("Run an analysis first so Agent 3 can visualize the latest result.")
 
+        # --- Callback for follow-up question buttons ---
+        def _set_agent2_question(q: str):
+            st.session_state["agent2_question"] = q
+
         # Follow-up questions
         if OPENAI_API_KEY and report.get("last_result") is not None:
             st.markdown("---")
@@ -1848,9 +1856,12 @@ elif section == "4️⃣ Ask a Question (Agent 2)":
             )
             if followups:
                 for i, fq in enumerate(followups):
-                    if st.button(f"💬 {fq}", key=f"followup_{i}"):
-                        st.session_state["agent2_question"] = fq
-                        st.experimental_rerun()
+                    st.button(
+                        f"💬 {fq}",
+                        key=f"followup_{i}",
+                        on_click=_set_agent2_question,
+                        args=(fq,),
+                    )
             else:
                 st.info("No follow-up suggestions available for this result.")
 
