@@ -25,7 +25,7 @@ if ENV_PATH.exists():
     load_dotenv(ENV_PATH)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
 
 gemini_model = None
 if GEMINI_API_KEY:
@@ -1924,3 +1924,4 @@ elif section == "5️⃣ Logs & Debug":
 
 st.markdown("---")
 st.caption("AI Analytics MVP – Agent 1–3, multi-visual dashboards with global date filters, saved views & follow-up Q&A.")
+
