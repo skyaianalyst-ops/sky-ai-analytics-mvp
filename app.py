@@ -9,7 +9,9 @@ import pandas as pd
 import streamlit as st
 import altair as alt
 from dotenv import load_dotenv
-from openai import OpenAI
+
+# Gemini
+import google.generativeai as genai
 
 # ================================================================
 # ENVIRONMENT SETUP
@@ -22,8 +24,16 @@ ENV_PATH = CONFIG_DIR / ".env"
 if ENV_PATH.exists():
     load_dotenv(ENV_PATH)
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI() if OPENAI_API_KEY else None
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-pro")
+
+gemini_model = None
+if GEMINI_API_KEY:
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model = genai.GenerativeModel(GEMINI_MODEL_NAME)
+    except Exception:
+        gemini_model = None
 
 st.set_page_config(page_title="AI Analytics MVP", page_icon="📊", layout="wide")
 
@@ -35,6 +45,27 @@ COLOR_PALETTE = [
     "#4c78a8", "#f58518", "#e45756", "#72b7b2", "#54a24b",
     "#eeca3b", "#b279a2", "#ff9da7", "#9d755d", "#bab0ab"
 ]
+
+# ================================================================
+# LLM HELPER (GEMINI)
+# ================================================================
+
+def llm_generate_text(system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:
+    if not gemini_model:
+        raise RuntimeError("GEMINI_API_KEY missing or Gemini model init failed.")
+    prompt = (
+        "SYSTEM INSTRUCTIONS:\n"
+        f"{system_prompt.strip()}\n\n"
+        "USER INPUT:\n"
+        f"{user_prompt.strip()}\n"
+    )
+    resp = gemini_model.generate_content(
+        prompt,
+        generation_config=genai.GenerationConfig(
+            temperature=float(temperature),
+        ),
+    )
+    return (getattr(resp, "text", None) or "").strip()
 
 # ================================================================
 # REPORT MANAGEMENT (POWER BI–STYLE)
@@ -126,8 +157,8 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Data source: Excel / CSV")
 
-    if not OPENAI_API_KEY:
-        st.error("OPENAI_API_KEY missing in config/.env – AI features limited.")
+    if not GEMINI_API_KEY:
+        st.error("GEMINI_API_KEY missing in config/.env – AI features limited.")
 
 
 # ================================================================
@@ -294,8 +325,8 @@ def get_main_dataframe(dataframes: Dict[str, pd.DataFrame]) -> Tuple[str, pd.Dat
 
 def agent1_summary(catalog: Dict[str, Any]) -> str:
     """LLM-based dataset overview + KPI suggestions (text only)."""
-    if not client:
-        return "OPENAI_API_KEY missing – cannot generate AI summary."
+    if not gemini_model:
+        return "GEMINI_API_KEY missing – cannot generate AI summary."
 
     system_prompt = """
     You are a senior data analyst.
@@ -311,15 +342,7 @@ def agent1_summary(catalog: Dict[str, Any]) -> str:
     user_prompt = f"DATA CATALOG:\n{catalog}"
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.2,
-        )
-        return response.choices[0].message.content
+        return llm_generate_text(system_prompt, user_prompt, temperature=0.2)
     except Exception as e:
         return f"(Agent 1 error: {e})"
 
@@ -327,21 +350,8 @@ def agent1_summary(catalog: Dict[str, Any]) -> str:
 def agent1_viz_blueprint(catalog: Dict[str, Any], main_sheet: str) -> Optional[List[Dict[str, Any]]]:
     """
     Agent 1 (extended) – analyse catalog + main sheet and design a viz_plan.
-    viz_plan = list of chart specs:
-    {
-        "title": "string",
-        "chart_type": "bar" | "column" | "line" | "area" |
-                      "scatter" | "histogram" | "pie" |
-                      "heatmap" | "boxplot" | "bubble",
-        "x": "column_name",
-        "y": "column_name or null",
-        "agg": "sum" | "mean" | "count" | "none",
-        "top_n": int or null,
-        "size": "column_name or null",
-        "color": "column_name or null"
-    }
     """
-    if not client:
+    if not gemini_model:
         return None
 
     system_prompt = """
@@ -413,15 +423,7 @@ def agent1_viz_blueprint(catalog: Dict[str, Any], main_sheet: str) -> Optional[L
     """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.2,
-        )
-        raw = response.choices[0].message.content or ""
+        raw = llm_generate_text(system_prompt, user_prompt, temperature=0.2)
 
         raw = raw.strip()
         if "```" in raw:
@@ -485,8 +487,8 @@ def agent2_generate_code(
     LLM generates Pandas code from NL question.
     Returns (code, error_message).
     """
-    if not client:
-        return None, "OPENAI_API_KEY missing – cannot generate code."
+    if not gemini_model:
+        return None, "GEMINI_API_KEY missing – cannot generate code."
 
     system_prompt = """
     You are AGENT 2: Elite Pandas Code Generator.
@@ -541,15 +543,7 @@ def agent2_generate_code(
     """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",  # changed from gpt-4.1
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.1,
-        )
-        code = response.choices[0].message.content or ""
+        code = llm_generate_text(system_prompt, user_prompt, temperature=0.1)
 
         if "```" in code:
             parts = code.split("```")
@@ -567,10 +561,12 @@ def agent2_generate_code(
 
 def agent2_self_heal(code: str, error: str, question: str) -> str:
     """Ask LLM to fix broken Pandas code."""
-    if not client:
+    if not gemini_model:
         return code
 
-    prompt = f"""
+    system_prompt = "You fix Pandas code."
+
+    user_prompt = f"""
     The following Pandas code failed with this error:
 
     ERROR:
@@ -591,15 +587,7 @@ def agent2_self_heal(code: str, error: str, question: str) -> str:
     """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": "You fix Pandas code."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
-        )
-        new_code = response.choices[0].message.content or ""
+        new_code = llm_generate_text(system_prompt, user_prompt, temperature=0.1)
         if "```" in new_code:
             parts = new_code.split("```")
             if len(parts) >= 3:
@@ -734,12 +722,11 @@ def generate_chart(
 
 def agent3_insight(df: pd.DataFrame) -> str:
     """LLM-based short business insight from result_df."""
-    if not client:
+    if not gemini_model:
         return "LLM key missing – cannot generate automatic insight."
 
-    prompt = f"""
-    You are AGENT 3: Final Business Insight Layer.
-
+    system_prompt = "You are AGENT 3: Final Business Insight Layer."
+    user_prompt = f"""
     Analyze the following table and give ONE clear business insight in 1–2 sentences.
 
     DATAFRAME SAMPLE (dict form):
@@ -753,12 +740,7 @@ def agent3_insight(df: pd.DataFrame) -> str:
     """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-        )
-        return response.choices[0].message.content
+        return llm_generate_text(system_prompt, user_prompt, temperature=0.2)
     except Exception as e:
         return f"(Insight unavailable: {e})"
 
@@ -767,12 +749,11 @@ def agent3_followup_questions(question: str, df: pd.DataFrame) -> List[str]:
     """
     Generate 3 follow-up analytics questions based on the user's question and result_df.
     """
-    if not client:
+    if not gemini_model:
         return []
 
-    prompt = f"""
-    You are AGENT 3 in an AI analytics system.
-
+    system_prompt = "You are AGENT 3 in an AI analytics system."
+    user_prompt = f"""
     The user asked this analytics question:
     {question}
 
@@ -802,12 +783,7 @@ def agent3_followup_questions(question: str, df: pd.DataFrame) -> List[str]:
     """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-        )
-        raw = response.choices[0].message.content or ""
+        raw = llm_generate_text(system_prompt, user_prompt, temperature=0.4)
         raw = raw.strip()
         if "```" in raw:
             parts = raw.split("```")
@@ -834,13 +810,12 @@ def agent3_followup_questions(question: str, df: pd.DataFrame) -> List[str]:
 
 def explain_chart_button(df_small: pd.DataFrame, title: str, context: str, key: str) -> None:
     """LLM explanation for a specific chart."""
-    if not client:
+    if not gemini_model:
         return
 
     if st.button("Explain this chart", key=key):
-        prompt = f"""
-        You are a senior business intelligence analyst.
-
+        system_prompt = "You are a senior business intelligence analyst."
+        user_prompt = f"""
         Chart title:
         {title}
 
@@ -859,12 +834,7 @@ def explain_chart_button(df_small: pd.DataFrame, title: str, context: str, key: 
 
         with st.spinner("Explaining chart..."):
             try:
-                response = client.chat.completions.create(
-                    model="gpt-4.1-mini",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.2,
-                )
-                text = response.choices[0].message.content
+                text = llm_generate_text(system_prompt, user_prompt, temperature=0.2)
                 st.markdown(text)
             except Exception as e:
                 st.error(f"Chart explanation failed: {e}")
@@ -917,7 +887,7 @@ def run_agent_3(df: Optional[pd.DataFrame]) -> None:
 
 def dataset_auto_insights_text(df: pd.DataFrame, sheet_name: str) -> str:
     """LLM narrative over the (possibly filtered) main dataframe."""
-    if not client:
+    if not gemini_model:
         return "LLM key missing – cannot generate narrative insights."
 
     numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
@@ -932,8 +902,8 @@ def dataset_auto_insights_text(df: pd.DataFrame, sheet_name: str) -> str:
     for c in cat_cols[:5]:
         cat_samples[c] = df[c].value_counts().head(10).to_dict()
 
-    prompt = f"""
-    You are an expert BI analyst.
+    system_prompt = "You are an expert BI analyst."
+    user_prompt = f"""
     You received a main dataset from sheet '{sheet_name}'.
 
     META:
@@ -958,12 +928,7 @@ def dataset_auto_insights_text(df: pd.DataFrame, sheet_name: str) -> str:
     """
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.25,
-        )
-        return response.choices[0].message.content
+        return llm_generate_text(system_prompt, user_prompt, temperature=0.25)
     except Exception as e:
         return f"(Dataset insight unavailable: {e})"
 
@@ -1477,7 +1442,7 @@ elif section == "2️⃣ Catalog + Summary (Auto)":
             semantic_index = report["semantic_index"]
 
         # Agent 1 summary FIRST
-        if OPENAI_API_KEY:
+        if GEMINI_API_KEY and gemini_model:
             if report.get("agent1_summary") is None:
                 with st.spinner("Running Agent 1 – analyzing dataset..."):
                     summary = agent1_summary(catalog)
@@ -1486,7 +1451,7 @@ elif section == "2️⃣ Catalog + Summary (Auto)":
             st.markdown("### 🤖 Agent 1 – Data Overview & KPIs")
             st.markdown(report["agent1_summary"])
         else:
-            st.warning("Set OPENAI_API_KEY in config/.env to enable AI summary.")
+            st.warning("Set GEMINI_API_KEY in config/.env to enable AI summary.")
 
         st.markdown("---")
         st.markdown("### 📘 Raw Catalog (for reference)")
@@ -1578,7 +1543,7 @@ elif section == "3️⃣ Full Data Insights (Auto)":
                     )
 
                 # ---------------- FULL ANALYST PIPELINE BUTTON ----------------
-                if OPENAI_API_KEY:
+                if GEMINI_API_KEY and gemini_model:
                     if st.button("🚀 Run Full Analyst Pipeline", key="full_pipeline"):
                         # Step 1: catalog + semantic index
                         with st.spinner("Step 1/4: Building data catalog..."):
@@ -1778,7 +1743,7 @@ elif section == "3️⃣ Full Data Insights (Auto)":
                     semantic_index = report["semantic_index"]
 
                 # Agent 1 viz blueprint if possible
-                if OPENAI_API_KEY:
+                if GEMINI_API_KEY and gemini_model:
                     if report.get("viz_plan") is None:
                         with st.spinner("Agent 1 is designing a visualization blueprint (viz_plan)..."):
                             viz_plan = agent1_viz_blueprint(catalog, sheet_name)
@@ -1797,7 +1762,7 @@ elif section == "3️⃣ Full Data Insights (Auto)":
 
                 st.markdown("---")
                 # Narrative insights for filtered working_main_df
-                if OPENAI_API_KEY:
+                if GEMINI_API_KEY and gemini_model:
                     st.markdown("### 💡 Narrative Insights (Analyst View)")
                     if report.get("dataset_narrative") is None:
                         with st.spinner("Generating narrative insights from current dataset view..."):
@@ -1805,7 +1770,7 @@ elif section == "3️⃣ Full Data Insights (Auto)":
                         report["dataset_narrative"] = narrative
                     st.markdown(report["dataset_narrative"])
                 else:
-                    st.info("Set OPENAI_API_KEY to enable narrative auto-insights.")
+                    st.info("Set GEMINI_API_KEY to enable narrative auto-insights.")
 
 
 # 4️⃣ Ask a Question (Agent 2)
@@ -1817,8 +1782,8 @@ elif section == "4️⃣ Ask a Question (Agent 2)":
         st.info("Upload a file and build the catalog first.")
     elif report.get("catalog") is None or report.get("semantic_index") is None:
         st.info("Please open 'Catalog + Summary (Auto)' once to build the catalog.")
-    elif not OPENAI_API_KEY:
-        st.warning("Set OPENAI_API_KEY to use Agent 2 (code generation).")
+    elif not (GEMINI_API_KEY and gemini_model):
+        st.warning("Set GEMINI_API_KEY to use Agent 2 (code generation).")
     else:
         st.markdown(f"**Active report:** `{report['name']}`")
 
@@ -1911,7 +1876,7 @@ elif section == "4️⃣ Ask a Question (Agent 2)":
             st.session_state["agent2_question"] = q
 
         # Follow-up questions
-        if OPENAI_API_KEY and report.get("last_result") is not None:
+        if (GEMINI_API_KEY and gemini_model) and report.get("last_result") is not None:
             st.markdown("---")
             st.markdown("### 🔁 Suggested Follow-up Questions")
             followups = agent3_followup_questions(
